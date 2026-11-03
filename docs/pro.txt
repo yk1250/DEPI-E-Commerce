@@ -1,0 +1,331 @@
+# منصة حجز الكشوفات الطبية (Clinic Platform)
+مشروع تخرج - تدريب ITI / DEPI - فريق من 5 أفراد
+
+---
+
+## 1. نظرة عامة
+
+منصة لحجز الكشوفات الطبية أونلاين. المريض يبحث عن دكتور (بالتخصص أو التقييم أو السعر)، ويحجز ويدفع، والدكتور يدير أجندته ويشوف التاريخ المرضي للمريض. الإدارة تتابع العيادات والأطباء والتقارير المالية.
+
+**القاعدة الأساسية:** أي مستخدم ما يقدرش يوصل لبيانات مريض تاني.
+
+### الأدوار (RBAC)
+| الدور | الصلاحيات |
+|---|---|
+| Admin | إدارة العيادات والتخصصات والأطباء المعتمدين، التقارير المالية، الكوبونات |
+| Doctor | الأجندة، أوقات العمل والإجازات والأسعار، عرض التاريخ المرضي للمريض، الرد على الرسائل |
+| Patient | البحث والحجز والدفع، التاريخ المرضي والمرفقات، تقييم الدكتور، مراسلة الدكتور بعد الكشف |
+| Receptionist | متابعة المواعيد، تأكيد الدفع في العيادة، تسجيل وصول المريض |
+
+---
+
+## 2. التقنيات
+
+| الجزء | التقنية |
+|---|---|
+| Backend | ASP.NET Core Web API (.NET 10)، Clean Architecture |
+| Database | SQL Server + Entity Framework Core |
+| Auth | ASP.NET Core Identity + JWT + OTP (مخصص) |
+| Realtime | SignalR (حالة الحجز، الرسائل) |
+| الدفع | Paymob Sandbox + الدفع في العيادة |
+| Jobs | Hosted Service أو Hangfire (التذكيرات، انتهاء الحجز المؤقت) |
+| Caching | Memory Cache أو Redis (التخصصات والأطباء الأكثر طلباً) |
+| Logging | Serilog |
+| التوثيق | Scalar (`/scalar`) + Postman Collection |
+| Localization | Resource Files، عربي / إنجليزي مع RTL |
+| Frontend | **لسه ما اتحددش** (انظر قسم القرارات المفتوحة) |
+
+---
+
+## 3. هيكل المشروع
+
+```
+medical booking.slnx
+├── Clinic.Domain          Entities، Enums، Exceptions (من غير أي packages)
+├── Clinic.Application     Use Cases، DTOs، Validators، Interfaces
+├── Clinic.Infrastructure  DbContext، Configurations، Identity، Paymob، Files، Jobs
+└── Clinic.API             Controllers، SignalR Hubs، Middleware، Program.cs
+```
+
+**قاعدة الاعتماديات:** الطبقة الخارجية تعرف الداخلية، والعكس لا.
+- `Domain` ما يعرفش أي حاجة.
+- `Application` يعتمد على `Domain` بس.
+- `Infrastructure` يعتمد على `Application` و`Domain`.
+- `API` يعتمد على `Application` و`Infrastructure`.
+
+---
+
+## 4. الحالة الحالية (اللي اتعمل)
+
+### Backend
+- [x] الـ Solution فيه 4 مشاريع بـ Clean Architecture، والـ references مربوطة صح.
+- [x] Serilog شغال (Console + ملف يومي في `Clinic.API\logs`).
+- [x] Scalar شغال على `/scalar`.
+- [x] `System.Security.Cryptography.Pkcs` على 10.0.13 (تحذيرات الأمان اتشالت).
+- [x] كل الـ Entities في `Clinic.Domain\Entities` (17 Entity).
+- [x] كل الـ Enums في `Clinic.Domain\Enums`.
+- [x] `ApplicationUser` (بيورث من `IdentityUser<Guid>`) في `Clinic.Infrastructure\Identity`.
+- [x] `AppDbContext` بيورث من `IdentityDbContext`.
+- [x] Configurations لكل الـ Entities (Unique indexes، FK، Precision، RowVersion، Check constraint على التقييم).
+- [x] كل علاقات الدومين `Restrict` (عشان SQL Server).
+- [x] `AddInfrastructure()` في `DependencyInjection.cs` بيسجل الـ DbContext.
+- [x] Migration `InitialCreate` اتطبقت، والجداول ظهرت في SSMS.
+- [x] Connection string في User Secrets (مش في الـ Git).
+
+### Database
+- [x] قاعدة `ClinicDb` على SQL Server محلي.
+- [ ] بيانات تجريبية للتخصصات والعيادات: ملف `seed-specialties-clinics.sql` جاهز، ولازم يتشغل مرة واحدة في SSMS (وتتأكد إن الصفوف ظهرت: 6 تخصصات و2 عيادات).
+
+### Git
+- [x] ريبو محلي فيه commits من البداية.
+- [ ] الريبو على GitHub: **لسه ما اترفعش.** ده أول حاجة تتعمل قبل التقسيم (انظر قسم Git).
+
+---
+
+## 5. الناقص (Backlog)
+
+### Backend
+| # | البند | المرحلة | الحالة |
+|---|---|---|---|
+| B1 | Identity Registration + JWT + Roles + Policies | 3 | لسه ما اتبدأش |
+| B2 | OTP لتأكيد الإيميل | 3 | محتاج قرار (إيميل ولا SMS، وأنهي خدمة) |
+| B3 | CRUD التخصصات والعيادات (Admin) | 4 | لسه |
+| B4 | الدكاترة: الملف والسعر والاعتماد (`IsApproved`) | 4 | لسه |
+| B5 | `WorkingSchedule` و`TimeOff` + توليد الـ Slots | 4 و5 | لسه |
+| B6 | البحث والفلترة (التخصص، السعر، التقييم) | 4 | لسه |
+| B7 | الحجز بدون تعارض (Transaction + RowVersion + اختبارات تزامن) | 5 | لسه، أصعب جزء |
+| B8 | الإلغاء وفتح الميعاد وقائمة الانتظار | 5 | **مستني قرار قائمة الانتظار** |
+| B9 | Paymob Sandbox + Webhook مع HMAC | 6 | لسه |
+| B10 | الدفع في العيادة (الـ Receptionist) | 6 | لسه |
+| B11 | Hosted Service: إلغاء الحجز المؤقت (`PendingPayment`) بعد 15 دقيقة | 6 | لسه |
+| B12 | التاريخ المرضي (`MedicalHistory`) بتشفير الحقول الحساسة | 7 | لسه |
+| B13 | المرفقات: رفع PDF وصور بأمان | 7 | لسه |
+| B14 | التقييمات بعد الكشف المكتمل فقط | 8 | لسه |
+| B15 | الكوبونات وكشف المتابعة | 8 | لسه |
+| B16 | الإشعارات والتذكيرات (Email/SMS) | 9 | لسه |
+| B17 | SignalR: حالة الحجز والرسائل الآمنة (بعد الكشف، 14 يوم) | 9 | لسه |
+| B18 | Localization عربي / إنجليزي + RTL | 10 | لسه |
+| B19 | Caching للاستعلامات الكتيرة | 10 | لسه |
+| B20 | Admin: الإحصائيات والتقارير المالية | 11 | لسه |
+| B21 | Global Exception Handling + Standard API Response | 12 | لسه |
+| B22 | Postman Collection + اختبارات + مراجعة أمنية | 12 | لسه |
+
+### Frontend
+| # | البند | الحالة |
+|---|---|---|
+| F1 | اختيار التقنية (MVC ولا React ولا Angular) | **قرار مفتوح** |
+| F2 | Patient Portal: البحث والحجز والدفع والتاريخ المرضي | لسه |
+| F3 | Doctor Dashboard: الأجندة والإجازات والتاريخ المرضي والرسائل | لسه |
+| F4 | Admin Dashboard: العيادات والأطباء والتقارير | لسه |
+| F5 | Receptionist: المواعيد وتأكيد الدفع وتسجيل الوصول | لسه |
+| F6 | Dark / Light Mode + Responsive + RTL | لسه |
+
+---
+
+## 6. القرارات المفتوحة
+
+لازم تتقفل **قبل** ما نقسم الشغل، لأنها بتأثر على الـ Entities والـ Modules:
+
+1. **قائمة الانتظار:** إزاي الربط بالميعاد المفتوح؟ وإزاي الإشعار بيتبعت؟
+2. **ملاحظات الكشف:** حقل على `Appointment` ولا جدول منفصل؟
+3. **OTP:** هيتبعت بإيميل ولا SMS؟ وأنهي خدمة؟
+4. **Frontend:** MVC ولا React ولا Angular؟
+5. **مين المسؤول عن الدمج النهائي؟** (شخص واحد بس بيلمس الملفات المشتركة)
+
+القرارات المسجلة بالفعل في `docs/decisions.md`:
+- السعر يتحفظ على `Appointment.PriceSnapshot` وقت الحجز.
+- الشات يفضل مفتوح 14 يوم بعد الكشف المكتمل.
+
+---
+
+## 7. توزيع الأدوار (5 أفراد)
+
+> **الأسماء:** ضيف الأسماء في الجدول ده.
+
+| # | المسؤولية | الاسم | المراحل | الفولدرات / الملفات الخاصة بيه |
+|---|---|---|---|---|
+| 1 | **Auth و RBAC** | [الاسم] | 3 | `Clinic.Infrastructure/Identity/`، `Clinic.API/Controllers/AuthController.cs`، `AuthModule` |
+| 2 | **الأطباء والجداول** | [الاسم] | 4 | `Clinic.Application/Features/Doctors/`، `DoctorsController`، `DoctorsModule` |
+| 3 | **محرك الحجز** | [الاسم] | 5 | `Clinic.Application/Features/Appointments/`، `AppointmentsController`، `BookingModule` |
+| 4 | **الدفع** | [الاسم] | 6 | `Clinic.Application/Features/Payments/`، `Clinic.Infrastructure/Payments/Paymob/`، `PaymentsModule` |
+| 5 | **السجل الطبي والمرفقات** | [الاسم] | 7 | `Clinic.Application/Features/MedicalHistory/`، `Features/Attachments/`، `Clinic.Infrastructure/Files/`، `MedicalModule` |
+
+### تفاصيل كل مسؤولية
+
+**1. Auth و RBAC**
+- تسجيل Identity (`AddIdentity<ApplicationUser, IdentityRole<Guid>>`) في `AddInfrastructure`.
+- الـ roles: Admin, Doctor, Patient, Receptionist.
+- Register / Login / JWT.
+- OTP لتأكيد الإيميل.
+- Policies للـ endpoints.
+- ينفذ `ICurrentUser` الحقيقي.
+- **أول حد يدمج في `develop`** لأن الباقيين بيعتمدوا عليه.
+
+**2. الأطباء والجداول**
+- CRUD للتخصصات والعيادات (Admin).
+- ملف الدكتور: السعر، نسبة المتابعة، مدتها، الاعتماد.
+- `WorkingSchedule` و`TimeOff`.
+- البحث والفلترة.
+
+**3. محرك الحجز (أصعب جزء)**
+- توليد الـ Slots من أوقات العمل، مع استبعاد الإجازات والمواعيد المحجوزة.
+- إنشاء الموعد بـ Transaction و`RowVersion`.
+- الإلغاء وفتح الميعاد.
+- قائمة الانتظار (بعد القرار).
+- **اختبارات تزامن:** حجز من أكتر من مريض في نفس اللحظة.
+- حساب `PriceSnapshot` في الـ Application layer.
+- التحقق من المتابعة: نفس الدكتور، داخل `FollowUpWindowDays`، والكشف السابق Completed.
+
+**4. الدفع**
+- Paymob Sandbox: الحساب والمفاتيح.
+- Webhook مع التحقق من HMAC **قبل أي حاجة**.
+- الدفع في العيادة، والـ Receptionist بيغير حالة الدفع.
+- Hosted Service: إلغاء الحجز المؤقت بعد 15 دقيقة وفتح الميعاد.
+- `Amount = max(0, OriginalAmount - DiscountAmount)`.
+- `Coupon.UsedCount` بيتزود بأمان من التزامن.
+
+**5. السجل الطبي والمرفقات**
+- `MedicalHistory` بتشفير الحقول الحساسة (الأمراض المزمنة، الحساسية، الأدوية).
+- مفتاح التشفير في User Secrets، مش في الكود.
+- رفع المرفقات: التحقق من النوع والحجم، وحفظ بمسار آمن.
+- **قاعدة الأمان:** المريض يشوف بياناته بس، والدكتور يشوف المرضى اللي عنده مواعيد معاهم بس. تتكتب في الـ Application layer، وكل endpoint لازم يتراجع.
+
+### المرحلة الجاية (8 إلى 12)
+نوزعها بعد ما المراحل 3 إلى 6 تخلص:
+- الكوبونات والتقييمات (8): أقرب للدفع.
+- الرسائل والإشعارات (9): أقرب للسجل الطبي.
+- Localization والـ Caching (10)، والـ Admin والتقارير (11)، والتلميع والاختبارات (12): بعدين حسب مين فاضي.
+
+---
+
+## 8. Git وقواعد الشغل
+
+### الفروع
+```
+main            النسخة المستقرة، محدش يكتب عليه مباشرة
+develop         التكامل، كل الدمج يحصل هنا
+feature/auth        الشخص 1
+feature/doctors     الشخص 2
+feature/booking     الشخص 3
+feature/payments    الشخص 4
+feature/medical     الشخص 5
+```
+
+### الإعداد الأول (مرة واحدة، شخص واحد)
+1. اعمل ريبو فاضي على GitHub.
+2. ارفع المشروع الحالي على `main`، واعمل `develop` منه، وارفعه.
+3. أضف كل الأفراد كـ **Collaborators** على الريبو.
+4. فعّل **Branch protection** على `main` و`develop`: ممنوع push مباشر، ولازم PR بمراجعة واحدة على الأقل.
+
+### دورة الشغل لكل فرد
+```
+1. git checkout develop && git pull
+2. git checkout -b feature/<المسؤولية>
+3. اشتغل في الفولدرات بتاعتك بس
+4. git add . && git commit -m "feat(<المسؤولية>): ..."
+5. git push -u origin feature/<المسؤولية>
+6. افتح Pull Request إلى develop
+7. شخص تاني يراجع، والمسؤول عن الدمج يعمل merge
+8. كل فرد يرجع يعمل pull لـ develop قبل ما يكمل
+```
+
+### تسمية الـ Commits
+- `feat(auth): add JWT login`
+- `fix(booking): handle concurrent slot lock`
+- `chore(infra): update packages`
+- `docs: update todo`
+
+---
+
+## 9. قواعد عشان ما يحصلش تعارض
+
+### ممنوع تعدّل (إلا المسؤول عن الدمج)
+- `Clinic.Domain/Entities/*` و`Clinic.Domain/Enums/*`: الـ Entities مقفولة، أي تعديل يتعمل بعد اتفاق الفريق كله.
+- `Program.cs`
+- `DependencyInjection.cs`
+- `AppDbContext.cs`
+- `Clinic.*.csproj`: إضافة package تتعمل بالاتفاق.
+
+### بدل التعديل على الملفات المشتركة
+كل مسؤولية تعمل **Module** خاص بيها، زي `BookingModule.cs` فيه `AddBooking(this IServiceCollection)`. والمسؤول عن الدمج بيضيف سطر واحد لكل module في `DependencyInjection.cs`.
+
+### الـ Migrations
+- **ممنوع تعمل Migration على فرعك.**
+- الـ Migration بتتعمل مرة واحدة بعد الدمج الكامل، من المسؤول عن الدمج، وتتطبق على داتابيز التكامل.
+- أي تعديل على الـ Entities قبل الـ Migration يتعمل في الفرع اللي بيحتاجه، ويتدمج الأول.
+
+### لو محتاج بيانات من مسؤولية تانية
+1. اكتب **interface** في فولدرك.
+2. اعمل **stub** عشان تشتغل محلياً.
+3. لما الدمج يحصل، المسؤول عن الدمج يبدل الـ stub بالتنفيذ الحقيقي.
+
+---
+
+## 10. ترتيب الدمج
+
+1. **Auth** يدمج الأول.
+2. بعده **الأطباء** و**الدفع** و**السجل الطبي** بالترتيب اللي يخلصوا فيه.
+3. **محرك الحجز** يدمج بعد الأطباء (لأنه بيعتمد على أوقات العمل).
+4. بعد كل دمج: الاختبارات تشتغل، وتتحدث `docs/todo.md`.
+5. بعد الدمج الكامل: Migration واحدة، وتتطبق على داتابيز التكامل.
+
+---
+
+## 11. Backend أول، وبعدين Frontend
+
+الترتيب: **نخلص الـ Backend كله، وبعدين نبدأ الـ Frontend.**
+
+### معنى "خلص الـ Backend"
+- كل الـ endpoints في الـ Scalar، ومتوثقة.
+- الصلاحيات شغالة (المريض مايشوفش بيانات مريض تاني).
+- اختبارات الحجز بدون تعارض بتعدي.
+- Postman Collection متعملة.
+- محدش مستني حاجة من الفرونت.
+
+### الفرونت
+- هيتبدأ بعد ما الـ Backend يتقفل.
+- هيتكلم مع الـ API بالعقد اللي في Scalar.
+- التقنية تتحدد في القرارات المفتوحة.
+
+---
+
+## 12. تعريف "خلص" (Definition of Done)
+
+أي مهمة تعتبر خلصت لما:
+- [ ] الكود بيتبني من غير warnings جديدة.
+- [ ] فيه Unit tests للقواعد، وIntegration tests للـ endpoints الحساسة.
+- [ ] الـ endpoints متسجلة في Scalar، ومتحدثة في Postman.
+- [ ] الصلاحيات متطبقة (Policy أو Role).
+- [ ] مفيش أسرار في الكود أو في `appsettings.json`.
+- [ ] `docs/todo.md` اتحدث.
+- [ ] الـ PR اتراجع من شخص تاني واتعمل merge لـ `develop`.
+
+---
+
+## 13. الأوامر المفيدة
+
+```powershell
+# تشغيل الـ API
+dotnet run --project Clinic.API
+
+# بناء الـ Solution
+dotnet build "medical booking.slnx"
+
+# Migration جديدة (من المسؤول عن الدمج بس)
+dotnet ef migrations add <Name> --project Clinic.Infrastructure --startup-project Clinic.API --output-dir Persistence/Migrations
+
+# تطبيق الـ Migrations
+dotnet ef database update --project Clinic.Infrastructure --startup-project Clinic.API
+
+# تعيين الـ connection string
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "<value>" --project Clinic.API
+```
+
+---
+
+## 14. ملاحظات مهمة
+
+- **الأسرار:** connection string، ومفاتيح Paymob، ومفتاح التشفير، وJWT secret: كلهم في User Secrets، ولا واحد منهم يتكتب في الكود أو يترفع على Git.
+- **التشفير:** الحقول المشفرة (MedicalHistory وMessage.Body) لازم تتشفر وتتفك في Infrastructure فقط.
+- **الـ Paymob Webhook:** أي طلب مالوش HMAC صحيح يترفض قبل ما يتعمل أي حاجة تانية.
+- **الـ Conversation:** `ExpiresAt` = وقت الكشف المكتمل + 14 يوم، ويتحسب في الـ Application layer.
