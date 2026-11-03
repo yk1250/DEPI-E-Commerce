@@ -2,7 +2,7 @@
 
 مشروع تخرج - تدريب ITI / DEPI. الفريق 3 أفراد (التقسيم التفصيلي في `docs/TEAM.md`).
 
-> آخر تحديث: 30 أكتوبر 2026. المراحل 0 إلى 4 (الأساس والـ Auth والأطباء والجداول) اتنفذت في الكود. الاختبارات في `docs/SWAGGER-TESTS.md`.
+> آخر تحديث: 3 نوفمبر 2026. المراحل 0 إلى 4 (الأساس والـ Auth والأطباء والجداول) اتنفذت في الكود. الاختبارات في `docs/SWAGGER-TESTS.md`.
 
 ---
 
@@ -53,7 +53,7 @@
 | Jobs | Hosted Service أو Hangfire (التذكيرات، انتهاء الحجز المؤقت) |
 | Caching | Memory Cache أو Redis |
 | Logging | Serilog |
-| التوثيق | **Swagger** على `/swagger` (مع زر Authorize للـ JWT) + Postman Collection. (Scalar مش متركب) |
+| التوثيق | **Swagger** على `/swagger` (مع زر Authorize للـ JWT) وملف `swagger.json` بيتصدّر للجنة عند الحاجة. (Postman اتشال، وScalar مش متركب) |
 | Localization | Resource Files، عربي / إنجليزي مع RTL |
 | Frontend | **لسه ما اتحددش** |
 
@@ -67,6 +67,8 @@ medical booking.slnx
 ├── Clinic.Application     Features/* (Services وDTOs)، Common/* (Interfaces، Exceptions، Security، Time)
 ├── Clinic.Infrastructure  AppDbContext، Configurations، Migrations، Identity (JWT, Seeder)، DI
 └── Clinic.API             Controllers، Middleware، Services/CurrentUser، Program.cs
+tests/
+└── Clinic.Tests           Unit tests (xUnit)
 ```
 
 **قاعدة الاعتماديات:** الطبقة الخارجية تعرف الداخلية، والعكس لا.
@@ -113,6 +115,9 @@ medical booking.slnx
 - [x] **البحث والفلترة:** تخصص، عيادة، سعر، تقييم، اسم، ترتيب، صفحات.
 - [x] **الريسبشن:** إنشاء وعرض وحذف من الأدمن.
 - [x] Swagger مع زر Authorize.
+- [x] **Unit tests** (`tests/Clinic.Tests`، xUnit، 55 اختبار): الجدول، التوقيت، الـ JWT، الأخطاء، `CurrentUser`، قواعد التحقق. بتشتغل بـ `dotnet test` من غير داتابيز.
+- [x] اختبارات Swagger الأساسية (Auth، البحث، الجدول، الإجازات) اتجربت ونجحت. الـ 115 كاملين وقت الدمج.
+- [x] المشروع على GitHub (`main`).
 
 ### لسه
 | # | البند | المرحلة | المسؤول |
@@ -133,7 +138,7 @@ medical booking.slnx
 | B18 | Localization عربي / إنجليزي + RTL | 10 | — |
 | B19 | Caching | 10 | — |
 | B20 | الإحصائيات والتقارير المالية (الأدمن) | 11 | — |
-| B22 | Postman Collection + اختبارات + مراجعة أمنية | 12 | — |
+| B22 | اختبارات Swagger الكاملة (115) وقت الدمج + مراجعة أمنية | 12 | — |
 | — | `IPatientAccessGuard` (قاعدة وصول الدكتور للمريض) | 5 أو 7 | شخص 2 أو 3 |
 | — | (اختياري) اقتراح التخصص من الأعراض بـ AI | آخر المشروع | لسه ما اتحسمش |
 
@@ -183,6 +188,9 @@ dotnet ef database update --project Clinic.Infrastructure --startup-project Clin
 dotnet build "medical booking.slnx"
 dotnet run --project Clinic.API --launch-profile https
 #    Swagger: https://localhost:7011/swagger
+
+# 4) Unit tests (من غير داتابيز)
+dotnet test
 ```
 
 حسابات الاختبار (الباسورد `Test@12345`، بتتظبط أوتوماتيك في Development):
@@ -228,7 +236,7 @@ Migration جديدة: من المسؤول عن الدمج بس، بعد الدم
 ### تعريف "خلص" (Definition of Done)
 - [ ] بيتبني من غير warnings جديدة.
 - [ ] Unit tests للقواعد، وIntegration tests للـ endpoints الحساسة (اختبارات التزامن على SQL Server حقيقي).
-- [ ] الـ endpoints في Swagger ومتحدثة في Postman.
+- [ ] الـ endpoints ظاهرة في Swagger بالـ Responses الصح.
 - [ ] الصلاحيات متطبقة (Role أو Policy) ومجربة بـ 401 و403.
 - [ ] مفيش أسرار في الكود أو `appsettings.json`.
 - [ ] `docs/todo.md` اتحدث، والـ PR اتراجع واتعمل merge.

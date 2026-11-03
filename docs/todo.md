@@ -16,8 +16,11 @@
 - [x] جدول العمل والإجازات (منع التقاطع)
 - [x] الريسبشن (أدمن)
 - [x] Swagger مع Authorize
-- [ ] تشغيل اختبارات `docs/SWAGGER-TESTS.md` كلها
-- [ ] رفع المشروع على GitHub وتفعيل Branch protection
+- [x] اختبارات Swagger الأساسية (Auth والبحث والجدول والإجازات)
+- [ ] اختبارات `docs/SWAGGER-TESTS.md` الكاملة (115) وقت الدمج
+- [x] Unit tests (`tests/Clinic.Tests`، 55 اختبار)
+- [x] المشروع على GitHub (`main`)
+- [ ] فرع `develop` + Branch protection (اللّيدر)
 
 ## المرحلة الجاية
 - [ ] OTP بالإيميل (شخص 1)
