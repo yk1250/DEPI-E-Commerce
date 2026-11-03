@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/Clinic.Tests/Clinic.Tests.csproj" />
+  </Folder>
   <Project Path="Clinic.API/Clinic.API.csproj" />
   <Project Path="Clinic.Application/Clinic.Application.csproj" />
   <Project Path="Clinic.Domain/Clinic.Domain.csproj" />
