@@ -57,7 +57,16 @@ public class AppointmentService
         };
 
         _db.Appointments.Add(appointment);
-        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // الـ Unique Index رفض الحفظ: مريض تاني حجز نفس الميعاد في نفس اللحظة
+            throw new ConflictException("This slot is already booked.");
+        }
 
         return appointment;
     }
