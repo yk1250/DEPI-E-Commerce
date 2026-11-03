@@ -54,4 +54,24 @@ public class SlotCalculatorTests
         Assert.Single(slots);
         Assert.Equal(new TimeOnly(9, 30), slots[0]);
     }
+
+    [Fact]
+    public void Time_off_blocks_overlapping_slots()
+    {
+        // Arrange
+        var start = new TimeOnly(9, 0);
+        var end = new TimeOnly(10, 0);
+        int slotMinutes = 30;
+        var timeOffs = new List<(TimeOnly From, TimeOnly To)>
+        {
+            (new TimeOnly(9, 0), new TimeOnly(9, 30))
+        };
+
+        // Act
+        var slots = SlotCalculator.Calculate(start, end, slotMinutes, timeOffs: timeOffs);
+
+        // Assert
+        Assert.Single(slots);
+        Assert.Equal(new TimeOnly(9, 30), slots[0]);
+    }
 }
