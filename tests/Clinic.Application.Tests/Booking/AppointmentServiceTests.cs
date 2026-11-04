@@ -85,6 +85,7 @@ public class AppointmentServiceTests
         db.Patients.Add(patient);
         await db.SaveChangesAsync();
 
+        // دوام الدكتور: الثلاثاء من 9 لـ 10 الصبح بتوقيت القاهرة، والكشف 30 دقيقة
         db.WorkingSchedules.Add(new WorkingSchedule
         {
             DoctorId = doctor.Id,
@@ -132,5 +133,39 @@ public class AppointmentServiceTests
 
         await Assert.ThrowsAsync<ConflictException>(() => service.BookAsync(new BookAppointmentRequest(
             patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.Online)));
+    }
+
+    [Fact]
+    public async Task Booking_before_working_hours_throws_validation()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var db = CreateDb(connection);
+        var (doctorId, patientId) = await SeedAsync(db);
+
+        var service = new AppointmentService(db);
+
+        // 8:00 صباحاً بتوقيت القاهرة = 06:00 UTC، قبل بداية الدوام (9:00)
+        var beforeShiftUtc = new DateTime(2026, 11, 3, 6, 0, 0, DateTimeKind.Utc);
+
+        await Assert.ThrowsAsync<AppValidationException>(() => service.BookAsync(new BookAppointmentRequest(
+            patientId, doctorId, beforeShiftUtc, AppointmentType.New, PaymentMethod.Online)));
+    }
+
+    [Fact]
+    public async Task Booking_off_grid_time_throws_validation()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var db = CreateDb(connection);
+        var (doctorId, patientId) = await SeedAsync(db);
+
+        var service = new AppointmentService(db);
+
+        // 9:15 صباحاً بتوقيت القاهرة = 07:15 UTC، مش على مضاعفات الـ 30 دقيقة
+        var offGridUtc = new DateTime(2026, 11, 3, 7, 15, 0, DateTimeKind.Utc);
+
+        await Assert.ThrowsAsync<AppValidationException>(() => service.BookAsync(new BookAppointmentRequest(
+            patientId, doctorId, offGridUtc, AppointmentType.New, PaymentMethod.Online)));
     }
 }
