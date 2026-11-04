@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -29,6 +28,22 @@ public class AppointmentService
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.Id == request.DoctorId, ct)
             ?? throw new NotFoundException(nameof(Doctor), request.DoctorId);
+
+        // 0a) الدكتور لازم يكون معتمد من الإدارة
+        if (!doctor.IsApproved)
+        {
+            throw new AppValidationException("This doctor is not approved for bookings yet.");
+        }
+
+        // 0b) حساب الدكتور لازم يكون شغال
+        var doctorAccount = await _db.UserSummaries
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == doctor.UserId, ct);
+
+        if (doctorAccount is null || !doctorAccount.IsActive)
+        {
+            throw new AppValidationException("This doctor's account is not active.");
+        }
 
         // 1) نحوّل الوقت لتوقيت القاهرة
         var localStart = ClinicTime.ToLocal(request.StartAtUtc);

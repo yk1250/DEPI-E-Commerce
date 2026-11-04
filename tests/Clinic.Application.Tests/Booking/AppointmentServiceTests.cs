@@ -168,4 +168,42 @@ public class AppointmentServiceTests
         await Assert.ThrowsAsync<AppValidationException>(() => service.BookAsync(new BookAppointmentRequest(
             patientId, doctorId, offGridUtc, AppointmentType.New, PaymentMethod.Online)));
     }
+
+    [Fact]
+    public async Task Booking_with_unapproved_doctor_throws_validation()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var db = CreateDb(connection);
+        var (doctorId, patientId) = await SeedAsync(db);
+
+        var doctor = await db.Doctors.FirstAsync(d => d.Id == doctorId);
+        doctor.IsApproved = false;
+        await db.SaveChangesAsync();
+
+        var service = new AppointmentService(db);
+
+        await Assert.ThrowsAsync<AppValidationException>(() => service.BookAsync(new BookAppointmentRequest(
+            patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.Online)));
+    }
+
+    [Fact]
+    public async Task Booking_with_locked_doctor_account_throws_validation()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var db = CreateDb(connection);
+        var (doctorId, patientId) = await SeedAsync(db);
+
+        // نقفل حساب الدكتور (الـ IsActive في ApplicationUser مش في Doctor)
+        var doctor = await db.Doctors.FirstAsync(d => d.Id == doctorId);
+        var user = await db.Users.FirstAsync(u => u.Id == doctor.UserId);
+        user.IsActive = false;
+        await db.SaveChangesAsync();
+
+        var service = new AppointmentService(db);
+
+        await Assert.ThrowsAsync<AppValidationException>(() => service.BookAsync(new BookAppointmentRequest(
+            patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.Online)));
+    }
 }
