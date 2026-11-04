@@ -8,6 +8,7 @@ using Clinic.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using System.Threading.Tasks;
 using Xunit;
@@ -112,7 +113,9 @@ public class ExpirePendingJobTests
         services.AddScoped<AppointmentService>();
         var provider = services.BuildServiceProvider();
 
-        var job = new ExpirePendingJob(provider.GetRequiredService<IServiceScopeFactory>());
+        var job = new ExpirePendingJob(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<ExpirePendingJob>.Instance);
 
         await job.RunOnceAsync(default);
 
