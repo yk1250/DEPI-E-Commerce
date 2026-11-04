@@ -146,13 +146,15 @@ public class AppointmentsController : ControllerBase
         throw new ForbiddenException("You do not have permission to perform this action.");
     }
 
+    /// بنحوّل الأوقات لـ UTC صريح، عشان الـ JSON يكتب Z في الآخر.
+    /// EF Core على SQL Server بيرجّع DateTime بـ Kind = Unspecified.
     private static AppointmentDto ToDto(Appointment appointment) => new(
         appointment.Id,
         appointment.DoctorId,
         appointment.PatientId,
-        appointment.StartAt,
-        appointment.EndAt,
+        DateTime.SpecifyKind(appointment.StartAt, DateTimeKind.Utc),
+        DateTime.SpecifyKind(appointment.EndAt, DateTimeKind.Utc),
         appointment.Status,
         appointment.PriceSnapshot,
-        appointment.ExpiresAt);
+        appointment.ExpiresAt is null ? null : DateTime.SpecifyKind(appointment.ExpiresAt.Value, DateTimeKind.Utc));
 }
