@@ -178,6 +178,36 @@ public class AppointmentService
         return appointment;
     }
 
+    /// الدكتور صاحب الموعد يلغي موعده. مفيش قاعدة ساعتين للدكتور. من PendingPayment أو Confirmed بس.
+    public async Task<Appointment> CancelByDoctorAsync(
+        int appointmentId,
+        int doctorId,
+        string? reason,
+        CancellationToken ct = default)
+    {
+        var appointment = await LoadAsync(appointmentId, ct);
+
+        if (appointment.DoctorId != doctorId)
+        {
+            throw new ForbiddenException("You can only cancel your own appointments.");
+        }
+
+        if (appointment.Status is not (AppointmentStatus.PendingPayment or AppointmentStatus.Confirmed))
+        {
+            throw new ConflictException($"An appointment with status {appointment.Status} cannot be cancelled.");
+        }
+
+        var nowUtc = _time.GetUtcNow().UtcDateTime;
+
+        appointment.Status = AppointmentStatus.Cancelled;
+        appointment.CancelledAt = nowUtc;
+        appointment.CancelReason = reason;
+
+        await _db.SaveChangesAsync(ct);
+
+        return appointment;
+    }
+
     /// الريسبشن أو الدكتور: المريض وصل العيادة. من Confirmed بس.
     public async Task<Appointment> CheckInAsync(int appointmentId, CancellationToken ct = default)
     {
