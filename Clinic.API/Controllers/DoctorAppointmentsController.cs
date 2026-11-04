@@ -12,11 +12,16 @@ namespace Clinic.API.Controllers;
 [Route("api/doctors/me/appointments")]
 public class DoctorAppointmentsController : ControllerBase
 {
+    private readonly AppointmentService _appointments;
     private readonly AppointmentQueries _queries;
     private readonly ICurrentUser _currentUser;
 
-    public DoctorAppointmentsController(AppointmentQueries queries, ICurrentUser currentUser)
+    public DoctorAppointmentsController(
+        AppointmentService appointments,
+        AppointmentQueries queries,
+        ICurrentUser currentUser)
     {
+        _appointments = appointments;
         _queries = queries;
         _currentUser = currentUser;
     }
@@ -35,6 +40,27 @@ public class DoctorAppointmentsController : ControllerBase
         var appointments = await _queries.GetDoctorAppointmentsAsync(doctorId, date, ct);
 
         return Ok(appointments.Select(ToDto).ToList());
+    }
+
+    /// الدكتور صاحب الموعد يلغي موعده. مفيش قاعدة ساعتين للدكتور. من PendingPayment أو Confirmed بس.
+    [HttpPost("{id:int}/cancel")]
+    [Authorize(Roles = Roles.Doctor)]
+    [ProducesResponseType(typeof(AppointmentDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> CancelMine(
+        int id,
+        [FromBody] CancelAppointmentBody? body,
+        CancellationToken ct)
+    {
+        var doctorId = _currentUser.DoctorId
+            ?? throw new ForbiddenException("Only doctors can cancel their appointments.");
+
+        var appointment = await _appointments.CancelByDoctorAsync(id, doctorId, body?.Reason, ct);
+
+        return Ok(ToDto(appointment));
     }
 
     private static AppointmentDto ToDto(Appointment appointment) => new(
