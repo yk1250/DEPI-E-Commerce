@@ -57,6 +57,19 @@ public class AppointmentServiceTests
         return user.Id;
     }
 
+    private static async Task<int> AddPatientAsync(AppDbContext db, string name)
+    {
+        var userId = await CreateUserAsync(db, name);
+        var patient = new Patient
+        {
+            UserId = userId,
+            DateOfBirth = new DateTime(1995, 1, 1)
+        };
+        db.Patients.Add(patient);
+        await db.SaveChangesAsync();
+        return patient.Id;
+    }
+
     private static async Task<(int DoctorId, int PatientId)> SeedAsync(AppDbContext db)
     {
         var specialty = new Specialty { NameAr = "باطنة", NameEn = "Internal" };
@@ -66,7 +79,6 @@ public class AppointmentServiceTests
         await db.SaveChangesAsync();
 
         var doctorUserId = await CreateUserAsync(db, "doctor1");
-        var patientUserId = await CreateUserAsync(db, "patient1");
 
         var doctor = new Doctor
         {
@@ -76,14 +88,10 @@ public class AppointmentServiceTests
             ConsultationFee = Fee,
             IsApproved = true
         };
-        var patient = new Patient
-        {
-            UserId = patientUserId,
-            DateOfBirth = new DateTime(1995, 1, 1)
-        };
         db.Doctors.Add(doctor);
-        db.Patients.Add(patient);
         await db.SaveChangesAsync();
+
+        var patientId = await AddPatientAsync(db, "patient1");
 
         // دوام الدكتور: الثلاثاء من 9 لـ 10 الصبح بتوقيت القاهرة، والكشف 30 دقيقة
         db.WorkingSchedules.Add(new WorkingSchedule
@@ -97,7 +105,7 @@ public class AppointmentServiceTests
         });
         await db.SaveChangesAsync();
 
-        return (doctor.Id, patient.Id);
+        return (doctor.Id, patientId);
     }
 
     [Fact]
@@ -195,7 +203,6 @@ public class AppointmentServiceTests
         using var db = CreateDb(connection);
         var (doctorId, patientId) = await SeedAsync(db);
 
-        // نقفل حساب الدكتور (الـ IsActive في ApplicationUser مش في Doctor)
         var doctor = await db.Doctors.FirstAsync(d => d.Id == doctorId);
         var user = await db.Users.FirstAsync(u => u.Id == doctor.UserId);
         user.IsActive = false;
@@ -205,5 +212,66 @@ public class AppointmentServiceTests
 
         await Assert.ThrowsAsync<AppValidationException>(() => service.BookAsync(new BookAppointmentRequest(
             patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.Online)));
+    }
+
+    [Fact]
+    public async Task Patient_cancels_confirmed_appointment_sets_status_and_reason()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var db = CreateDb(connection);
+        var (doctorId, patientId) = await SeedAsync(db);
+
+        var service = new AppointmentService(db);
+
+        var appointment = await service.BookAsync(new BookAppointmentRequest(
+            patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.AtClinic));
+        Assert.Equal(AppointmentStatus.Confirmed, appointment.Status);
+
+        var cancelled = await service.CancelByPatientAsync(appointment.Id, patientId, "طارئ");
+
+        Assert.Equal(AppointmentStatus.Cancelled, cancelled.Status);
+        Assert.NotNull(cancelled.CancelledAt);
+        Assert.Equal("طارئ", cancelled.CancelReason);
+    }
+
+    [Fact]
+    public async Task After_cancel_the_same_slot_can_be_booked_again()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var db = CreateDb(connection);
+        var (doctorId, patientId) = await SeedAsync(db);
+
+        var service = new AppointmentService(db);
+
+        var first = await service.BookAsync(new BookAppointmentRequest(
+            patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.AtClinic));
+
+        await service.CancelByPatientAsync(first.Id, patientId, null);
+
+        var second = await service.BookAsync(new BookAppointmentRequest(
+            patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.AtClinic));
+
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.Equal(AppointmentStatus.Confirmed, second.Status);
+    }
+
+    [Fact]
+    public async Task Patient_cannot_cancel_another_patients_appointment()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var db = CreateDb(connection);
+        var (doctorId, patientId) = await SeedAsync(db);
+        var otherPatientId = await AddPatientAsync(db, "patient2");
+
+        var service = new AppointmentService(db);
+
+        var appointment = await service.BookAsync(new BookAppointmentRequest(
+            patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.AtClinic));
+
+        await Assert.ThrowsAsync<ForbiddenException>(() =>
+            service.CancelByPatientAsync(appointment.Id, otherPatientId, null));
     }
 }

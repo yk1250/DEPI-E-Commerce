@@ -131,4 +131,35 @@ public class AppointmentService
 
         return appointment;
     }
+
+    /// المريض يلغي موعده. بيفتح الميعاد للحجز تاني.
+    public async Task<Appointment> CancelByPatientAsync(
+        int appointmentId,
+        int patientId,
+        string? reason,
+        CancellationToken ct = default)
+    {
+        // tracked عشان نعدّل عليه ونحفظ
+        var appointment = await _db.Appointments
+            .FirstOrDefaultAsync(a => a.Id == appointmentId, ct)
+            ?? throw new NotFoundException(nameof(Appointment), appointmentId);
+
+        if (appointment.PatientId != patientId)
+        {
+            throw new ForbiddenException("You can only cancel your own appointments.");
+        }
+
+        if (appointment.Status is not (AppointmentStatus.PendingPayment or AppointmentStatus.Confirmed))
+        {
+            throw new ConflictException($"An appointment with status {appointment.Status} cannot be cancelled.");
+        }
+
+        appointment.Status = AppointmentStatus.Cancelled;
+        appointment.CancelledAt = DateTime.UtcNow;
+        appointment.CancelReason = reason;
+
+        await _db.SaveChangesAsync(ct);
+
+        return appointment;
+    }
 }
