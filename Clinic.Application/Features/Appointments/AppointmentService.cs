@@ -254,6 +254,20 @@ public class AppointmentService
         return expired.Count;
     }
 
+
+    /// بيرجّع الدكتور والعيادة بتاعة الموعد، عشان الـ Controller يتحقق من الصلاحيات.
+    public async Task<(int DoctorId, int ClinicId)> GetClinicScopeAsync(int appointmentId, CancellationToken ct = default)
+    {
+        var scope = await (from a in _db.Appointments
+                           join d in _db.Doctors on a.DoctorId equals d.Id
+                           where a.Id == appointmentId
+                           select new { a.DoctorId, d.ClinicId })
+            .FirstOrDefaultAsync(ct)
+            ?? throw new NotFoundException(nameof(Appointment), appointmentId);
+
+        return (scope.DoctorId, scope.ClinicId);
+    }
+
     private async Task<Appointment> LoadAsync(int appointmentId, CancellationToken ct)
     {
         return await _db.Appointments
