@@ -1,4 +1,5 @@
-﻿using Clinic.Application.Features.Slots;
+﻿using Clinic.Application.Features.Appointments;
+using Clinic.Application.Features.Slots;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Clinic.Infrastructure.Booking;
@@ -9,6 +10,7 @@ public static class BookingModule
     {
         services.AddScoped<IDoctorAvailabilityReader, DoctorAvailabilityReader>();
         services.AddScoped<SlotService>();
+        services.AddScoped<AppointmentService>();
 
         return services;
     }
