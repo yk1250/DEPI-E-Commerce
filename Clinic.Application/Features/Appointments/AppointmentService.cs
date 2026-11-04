@@ -172,4 +172,29 @@ public class AppointmentService
 
         return appointment;
     }
+
+    /// يحوّل الحجوزات PendingPayment اللي انتهت مهلة دفعها لـ Expired، ويرجّع عددها.
+    /// الـ Hosted Service (B11) هيستدعيه دورياً. الـ Confirmed ما بيتلمسش أبداً.
+    public async Task<int> ExpirePendingAsync(CancellationToken ct = default)
+    {
+        var nowUtc = _time.GetUtcNow().UtcDateTime;
+
+        var expired = await _db.Appointments
+            .Where(a => a.Status == AppointmentStatus.PendingPayment
+                && a.ExpiresAt != null
+                && a.ExpiresAt < nowUtc)
+            .ToListAsync(ct);
+
+        foreach (var appointment in expired)
+        {
+            appointment.Status = AppointmentStatus.Expired;
+        }
+
+        if (expired.Count > 0)
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+
+        return expired.Count;
+    }
 }
