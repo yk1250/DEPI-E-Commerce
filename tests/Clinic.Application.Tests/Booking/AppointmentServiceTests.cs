@@ -18,6 +18,26 @@ public class AppointmentServiceTests
     private static readonly DateTime SlotUtc = new(2026, 11, 3, 7, 0, 0, DateTimeKind.Utc);
     private const decimal Fee = 300m;
 
+    // الساعة قبل الموعد بيوم: الإلغاء مسموح
+    private static readonly TimeProvider EarlyClock =
+        new FixedClock(new DateTimeOffset(2026, 11, 2, 12, 0, 0, TimeSpan.Zero));
+
+    // الساعة قبل الموعد بساعة واحدة: الإلغاء ممنوع (أقل من ساعتين)
+    private static readonly TimeProvider LateClock =
+        new FixedClock(new DateTimeOffset(2026, 11, 3, 6, 0, 0, TimeSpan.Zero));
+
+    private sealed class FixedClock : TimeProvider
+    {
+        private readonly DateTimeOffset _now;
+
+        public FixedClock(DateTimeOffset now)
+        {
+            _now = now;
+        }
+
+        public override DateTimeOffset GetUtcNow() => _now;
+    }
+
     // نسخة للاختبار بس: SQLite ما بيولّدش RowVersion زي SQL Server
     private sealed class TestDbContext : AppDbContext
     {
@@ -116,7 +136,7 @@ public class AppointmentServiceTests
         using var db = CreateDb(connection);
         var (doctorId, patientId) = await SeedAsync(db);
 
-        var service = new AppointmentService(db);
+        var service = new AppointmentService(db, EarlyClock);
 
         var appointment = await service.BookAsync(new BookAppointmentRequest(
             patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.Online));
@@ -134,7 +154,7 @@ public class AppointmentServiceTests
         using var db = CreateDb(connection);
         var (doctorId, patientId) = await SeedAsync(db);
 
-        var service = new AppointmentService(db);
+        var service = new AppointmentService(db, EarlyClock);
 
         await service.BookAsync(new BookAppointmentRequest(
             patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.Online));
@@ -151,7 +171,7 @@ public class AppointmentServiceTests
         using var db = CreateDb(connection);
         var (doctorId, patientId) = await SeedAsync(db);
 
-        var service = new AppointmentService(db);
+        var service = new AppointmentService(db, EarlyClock);
 
         // 8:00 صباحاً بتوقيت القاهرة = 06:00 UTC، قبل بداية الدوام (9:00)
         var beforeShiftUtc = new DateTime(2026, 11, 3, 6, 0, 0, DateTimeKind.Utc);
@@ -168,7 +188,7 @@ public class AppointmentServiceTests
         using var db = CreateDb(connection);
         var (doctorId, patientId) = await SeedAsync(db);
 
-        var service = new AppointmentService(db);
+        var service = new AppointmentService(db, EarlyClock);
 
         // 9:15 صباحاً بتوقيت القاهرة = 07:15 UTC، مش على مضاعفات الـ 30 دقيقة
         var offGridUtc = new DateTime(2026, 11, 3, 7, 15, 0, DateTimeKind.Utc);
@@ -189,7 +209,7 @@ public class AppointmentServiceTests
         doctor.IsApproved = false;
         await db.SaveChangesAsync();
 
-        var service = new AppointmentService(db);
+        var service = new AppointmentService(db, EarlyClock);
 
         await Assert.ThrowsAsync<AppValidationException>(() => service.BookAsync(new BookAppointmentRequest(
             patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.Online)));
@@ -208,7 +228,7 @@ public class AppointmentServiceTests
         user.IsActive = false;
         await db.SaveChangesAsync();
 
-        var service = new AppointmentService(db);
+        var service = new AppointmentService(db, EarlyClock);
 
         await Assert.ThrowsAsync<AppValidationException>(() => service.BookAsync(new BookAppointmentRequest(
             patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.Online)));
@@ -222,7 +242,7 @@ public class AppointmentServiceTests
         using var db = CreateDb(connection);
         var (doctorId, patientId) = await SeedAsync(db);
 
-        var service = new AppointmentService(db);
+        var service = new AppointmentService(db, EarlyClock);
 
         var appointment = await service.BookAsync(new BookAppointmentRequest(
             patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.AtClinic));
@@ -243,7 +263,7 @@ public class AppointmentServiceTests
         using var db = CreateDb(connection);
         var (doctorId, patientId) = await SeedAsync(db);
 
-        var service = new AppointmentService(db);
+        var service = new AppointmentService(db, EarlyClock);
 
         var first = await service.BookAsync(new BookAppointmentRequest(
             patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.AtClinic));
@@ -266,12 +286,32 @@ public class AppointmentServiceTests
         var (doctorId, patientId) = await SeedAsync(db);
         var otherPatientId = await AddPatientAsync(db, "patient2");
 
-        var service = new AppointmentService(db);
+        var service = new AppointmentService(db, EarlyClock);
 
         var appointment = await service.BookAsync(new BookAppointmentRequest(
             patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.AtClinic));
 
         await Assert.ThrowsAsync<ForbiddenException>(() =>
             service.CancelByPatientAsync(appointment.Id, otherPatientId, null));
+    }
+
+    [Fact]
+    public async Task Patient_cannot_cancel_less_than_two_hours_before_start()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var db = CreateDb(connection);
+        var (doctorId, patientId) = await SeedAsync(db);
+
+        // الحجز اتعمل وقت الساعة قبل الموعد بيوم
+        var bookingService = new AppointmentService(db, EarlyClock);
+        var appointment = await bookingService.BookAsync(new BookAppointmentRequest(
+            patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.AtClinic));
+
+        // الإلغاء بيحصل وقت الساعة قبل الموعد بساعة واحدة
+        var cancelService = new AppointmentService(db, LateClock);
+
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            cancelService.CancelByPatientAsync(appointment.Id, patientId, null));
     }
 }

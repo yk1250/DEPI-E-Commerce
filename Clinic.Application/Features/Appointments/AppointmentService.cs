@@ -14,12 +14,15 @@ namespace Clinic.Application.Features.Appointments;
 public class AppointmentService
 {
     private static readonly TimeSpan PaymentWindow = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan CancelCutoff = TimeSpan.FromHours(2);
 
     private readonly IAppDbContext _db;
+    private readonly TimeProvider _time;
 
-    public AppointmentService(IAppDbContext db)
+    public AppointmentService(IAppDbContext db, TimeProvider? time = null)
     {
         _db = db;
+        _time = time ?? TimeProvider.System;
     }
 
     public async Task<Appointment> BookAsync(BookAppointmentRequest request, CancellationToken ct = default)
@@ -102,6 +105,7 @@ public class AppointmentService
             throw new ConflictException("This slot is already booked.");
         }
 
+        var nowUtc = _time.GetUtcNow().UtcDateTime;
         var isOnline = request.PaymentMethod == PaymentMethod.Online;
 
         var appointment = new Appointment
@@ -113,8 +117,8 @@ public class AppointmentService
             Type = request.Type,
             Status = isOnline ? AppointmentStatus.PendingPayment : AppointmentStatus.Confirmed,
             PriceSnapshot = doctor.ConsultationFee,
-            ExpiresAt = isOnline ? DateTime.UtcNow.Add(PaymentWindow) : null,
-            CreatedAt = DateTime.UtcNow
+            ExpiresAt = isOnline ? nowUtc.Add(PaymentWindow) : null,
+            CreatedAt = nowUtc
         };
 
         _db.Appointments.Add(appointment);
@@ -132,14 +136,13 @@ public class AppointmentService
         return appointment;
     }
 
-    /// المريض يلغي موعده. بيفتح الميعاد للحجز تاني.
+    /// المريض يلغي موعده. بيفتح الميعاد للحجز تاني. ممنوع قبل الموعد بأقل من ساعتين.
     public async Task<Appointment> CancelByPatientAsync(
         int appointmentId,
         int patientId,
         string? reason,
         CancellationToken ct = default)
     {
-        // tracked عشان نعدّل عليه ونحفظ
         var appointment = await _db.Appointments
             .FirstOrDefaultAsync(a => a.Id == appointmentId, ct)
             ?? throw new NotFoundException(nameof(Appointment), appointmentId);
@@ -154,8 +157,15 @@ public class AppointmentService
             throw new ConflictException($"An appointment with status {appointment.Status} cannot be cancelled.");
         }
 
+        var nowUtc = _time.GetUtcNow().UtcDateTime;
+
+        if (appointment.StartAt - nowUtc < CancelCutoff)
+        {
+            throw new ConflictException("Appointments can only be cancelled at least 2 hours before the start time.");
+        }
+
         appointment.Status = AppointmentStatus.Cancelled;
-        appointment.CancelledAt = DateTime.UtcNow;
+        appointment.CancelledAt = nowUtc;
         appointment.CancelReason = reason;
 
         await _db.SaveChangesAsync(ct);
