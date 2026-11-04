@@ -43,7 +43,7 @@ public class AppointmentConcurrencyTests
         var patient = await setupDb.Patients.AsNoTracking().FirstAsync();
 
         // الميعاد = أول دقيقة في دوام الدكتور، بتوقيت القاهرة وبعدين UTC
-        var day = new DateOnly(2026, 11, 3);
+        var day = new DateOnly(2026, 11, 17);
         var slotUtc = ClinicTime.ToUtc(day, schedule.StartTime);
 
         // ننضف أي حجز قديم على نفس الميعاد عشان الاختبار يتكرر

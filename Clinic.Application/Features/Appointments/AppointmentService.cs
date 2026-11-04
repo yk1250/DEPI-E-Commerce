@@ -27,6 +27,14 @@ public class AppointmentService
 
     public async Task<Appointment> BookAsync(BookAppointmentRequest request, CancellationToken ct = default)
     {
+        var nowUtc = _time.GetUtcNow().UtcDateTime;
+
+        // 0) مينفعش نحجز ميعاد بدأ أو فات
+        if (request.StartAtUtc <= nowUtc)
+        {
+            throw new AppValidationException("Cannot book an appointment that has already started or passed.");
+        }
+
         var doctor = await _db.Doctors
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.Id == request.DoctorId, ct)
@@ -105,7 +113,6 @@ public class AppointmentService
             throw new ConflictException("This slot is already booked.");
         }
 
-        var nowUtc = _time.GetUtcNow().UtcDateTime;
         var isOnline = request.PaymentMethod == PaymentMethod.Online;
 
         var appointment = new Appointment
@@ -229,6 +236,19 @@ public class AppointmentService
         return appointment;
     }
 
+    /// بيرجّع الدكتور والعيادة بتاعة الموعد، عشان الـ Controller يتحقق من الصلاحيات.
+    public async Task<(int DoctorId, int ClinicId)> GetClinicScopeAsync(int appointmentId, CancellationToken ct = default)
+    {
+        var scope = await (from a in _db.Appointments
+                           join d in _db.Doctors on a.DoctorId equals d.Id
+                           where a.Id == appointmentId
+                           select new { a.DoctorId, d.ClinicId })
+            .FirstOrDefaultAsync(ct)
+            ?? throw new NotFoundException(nameof(Appointment), appointmentId);
+
+        return (scope.DoctorId, scope.ClinicId);
+    }
+
     /// يحوّل الحجوزات PendingPayment اللي انتهت مهلة دفعها لـ Expired، ويرجّع عددها.
     /// الـ Hosted Service بيستدعيه دورياً. الـ Confirmed ما بيتلمسش أبداً.
     public async Task<int> ExpirePendingAsync(CancellationToken ct = default)
@@ -252,20 +272,6 @@ public class AppointmentService
         }
 
         return expired.Count;
-    }
-
-
-    /// بيرجّع الدكتور والعيادة بتاعة الموعد، عشان الـ Controller يتحقق من الصلاحيات.
-    public async Task<(int DoctorId, int ClinicId)> GetClinicScopeAsync(int appointmentId, CancellationToken ct = default)
-    {
-        var scope = await (from a in _db.Appointments
-                           join d in _db.Doctors on a.DoctorId equals d.Id
-                           where a.Id == appointmentId
-                           select new { a.DoctorId, d.ClinicId })
-            .FirstOrDefaultAsync(ct)
-            ?? throw new NotFoundException(nameof(Appointment), appointmentId);
-
-        return (scope.DoctorId, scope.ClinicId);
     }
 
     private async Task<Appointment> LoadAsync(int appointmentId, CancellationToken ct)

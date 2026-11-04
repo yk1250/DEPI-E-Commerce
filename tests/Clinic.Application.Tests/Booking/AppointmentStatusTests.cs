@@ -17,7 +17,7 @@ public class AppointmentStatusTests
     // الثلاثاء 3 نوفمبر 2026، 9:00 صباحاً بتوقيت القاهرة = 07:00 UTC
     private static readonly DateTime SlotUtc = new(2026, 11, 3, 7, 0, 0, DateTimeKind.Utc);
 
-    // وقت الحجز: قبل الموعد بيومين
+    // وقت الحجز: قبل الموعد بيومين (لازم الحجز يحصل قبل الموعد)
     private static readonly DateTimeOffset BookingTime = new(2026, 11, 1, 7, 0, 0, TimeSpan.Zero);
 
     // قبل بداية الموعد بنص ساعة
@@ -120,10 +120,11 @@ public class AppointmentStatusTests
         return (doctor.Id, patient.Id);
     }
 
-    // حجز في العيادة: الحالة Confirmed فوراً
-    private static Task<Appointment> BookConfirmedAsync(AppointmentService service, int doctorId, int patientId)
+    // حجز في العيادة: الحالة Confirmed فوراً، والحجز بيحصل وقت BookingTime (قبل الموعد)
+    private static Task<Appointment> BookConfirmedAsync(AppDbContext db, int doctorId, int patientId)
     {
-        return service.BookAsync(new BookAppointmentRequest(
+        var bookingService = new AppointmentService(db, new FixedClock(BookingTime));
+        return bookingService.BookAsync(new BookAppointmentRequest(
             patientId, doctorId, SlotUtc, AppointmentType.New, PaymentMethod.AtClinic));
     }
 
@@ -135,9 +136,9 @@ public class AppointmentStatusTests
         using var db = CreateDb(connection);
         var (doctorId, patientId) = await SeedAsync(db);
 
-        var service = new AppointmentService(db, new FixedClock(BookingTime));
-        var appointment = await BookConfirmedAsync(service, doctorId, patientId);
+        var appointment = await BookConfirmedAsync(db, doctorId, patientId);
 
+        var service = new AppointmentService(db, new FixedClock(BookingTime));
         var result = await service.CheckInAsync(appointment.Id);
 
         Assert.Equal(AppointmentStatus.CheckedIn, result.Status);
@@ -151,8 +152,9 @@ public class AppointmentStatusTests
         using var db = CreateDb(connection);
         var (doctorId, patientId) = await SeedAsync(db);
 
+        var appointment = await BookConfirmedAsync(db, doctorId, patientId);
+
         var service = new AppointmentService(db, new FixedClock(AfterStart));
-        var appointment = await BookConfirmedAsync(service, doctorId, patientId);
 
         await Assert.ThrowsAsync<ConflictException>(() => service.CompleteAsync(appointment.Id));
     }
@@ -165,11 +167,13 @@ public class AppointmentStatusTests
         using var db = CreateDb(connection);
         var (doctorId, patientId) = await SeedAsync(db);
 
-        var service = new AppointmentService(db, new FixedClock(AfterStart));
-        var appointment = await BookConfirmedAsync(service, doctorId, patientId);
+        var appointment = await BookConfirmedAsync(db, doctorId, patientId);
 
-        await service.CheckInAsync(appointment.Id);
-        var result = await service.CompleteAsync(appointment.Id);
+        var checkInService = new AppointmentService(db, new FixedClock(BookingTime));
+        await checkInService.CheckInAsync(appointment.Id);
+
+        var completeService = new AppointmentService(db, new FixedClock(AfterStart));
+        var result = await completeService.CompleteAsync(appointment.Id);
 
         Assert.Equal(AppointmentStatus.Completed, result.Status);
     }
@@ -182,8 +186,7 @@ public class AppointmentStatusTests
         using var db = CreateDb(connection);
         var (doctorId, patientId) = await SeedAsync(db);
 
-        var bookingService = new AppointmentService(db, new FixedClock(BookingTime));
-        var appointment = await BookConfirmedAsync(bookingService, doctorId, patientId);
+        var appointment = await BookConfirmedAsync(db, doctorId, patientId);
 
         var service = new AppointmentService(db, new FixedClock(BeforeStart));
 
@@ -198,8 +201,7 @@ public class AppointmentStatusTests
         using var db = CreateDb(connection);
         var (doctorId, patientId) = await SeedAsync(db);
 
-        var bookingService = new AppointmentService(db, new FixedClock(BookingTime));
-        var appointment = await BookConfirmedAsync(bookingService, doctorId, patientId);
+        var appointment = await BookConfirmedAsync(db, doctorId, patientId);
 
         var service = new AppointmentService(db, new FixedClock(AfterStart));
         var result = await service.MarkNoShowAsync(appointment.Id);
@@ -215,10 +217,11 @@ public class AppointmentStatusTests
         using var db = CreateDb(connection);
         var (doctorId, patientId) = await SeedAsync(db);
 
-        var service = new AppointmentService(db, new FixedClock(BookingTime));
-        var appointment = await BookConfirmedAsync(service, doctorId, patientId);
-        await service.CancelByPatientAsync(appointment.Id, patientId, null);
+        var appointment = await BookConfirmedAsync(db, doctorId, patientId);
 
-        await Assert.ThrowsAsync<ConflictException>(() => service.CheckInAsync(appointment.Id));
+        var cancelService = new AppointmentService(db, new FixedClock(BookingTime));
+        await cancelService.CancelByPatientAsync(appointment.Id, patientId, null);
+
+        await Assert.ThrowsAsync<ConflictException>(() => cancelService.CheckInAsync(appointment.Id));
     }
 }
