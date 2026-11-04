@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using Clinic.API.Jobs;
 using Clinic.API.Middleware;
 using Clinic.API.Services;
 using Clinic.Application;
@@ -28,9 +29,12 @@ try
         .WriteTo.Console()
         .WriteTo.File("logs/clinic-.log", rollingInterval: RollingInterval.Day));
 
-    // الداتابيز + Identity + JWT (بيتحقق من Jwt:Key وبيوقف التشغيل برسالة واضحة لو ناقص)
+    // الداتابيز + Identity + JWT + محرك الحجز (بيتحقق من Jwt:Key وبيوقف التشغيل برسالة واضحة لو ناقص)
     builder.Services.AddInfrastructure(builder.Configuration);
     builder.Services.AddApplication();
+
+    // Job إلغاء الحجوزات المنتهية: بيشتغل كل دقيقة في الخلفية
+    builder.Services.AddHostedService<ExpirePendingHostedService>();
 
     builder.Services.AddHttpContextAccessor();
     builder.Services.AddScoped<ICurrentUser, CurrentUser>();

@@ -12,6 +12,9 @@ public static class BookingModule
         services.AddScoped<SlotService>();
         services.AddScoped<AppointmentService>();
 
+        // الـ Job بياخد IServiceScopeFactory بس، فـ Singleton آمن
+        services.AddSingleton<ExpirePendingJob>();
+
         return services;
     }
 }
