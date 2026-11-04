@@ -13,11 +13,16 @@ namespace Clinic.API.Controllers;
 public class AppointmentsController : ControllerBase
 {
     private readonly AppointmentService _appointments;
+    private readonly AppointmentQueries _queries;
     private readonly ICurrentUser _currentUser;
 
-    public AppointmentsController(AppointmentService appointments, ICurrentUser currentUser)
+    public AppointmentsController(
+        AppointmentService appointments,
+        AppointmentQueries queries,
+        ICurrentUser currentUser)
     {
         _appointments = appointments;
+        _queries = queries;
         _currentUser = currentUser;
     }
 
@@ -157,4 +162,27 @@ public class AppointmentsController : ControllerBase
         appointment.Status,
         appointment.PriceSnapshot,
         appointment.ExpiresAt is null ? null : DateTime.SpecifyKind(appointment.ExpiresAt.Value, DateTimeKind.Utc));
+
+
+
+    /// مواعيد المريض الحالي، من الأقرب للأبعد. الـ PatientId بيتاخد من الـ token بس.
+    [HttpGet("me")]
+    [Authorize(Roles = Roles.Patient)]
+    [ProducesResponseType(typeof(IReadOnlyList<AppointmentDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetMine(CancellationToken ct)
+    {
+        var patientId = _currentUser.PatientId
+            ?? throw new ForbiddenException("Only patients can view their appointments.");
+
+        var appointments = await _queries.GetPatientAppointmentsAsync(patientId, ct);
+
+        return Ok(appointments.Select(ToDto).ToList());
+    }
+
+
+
+
+
 }

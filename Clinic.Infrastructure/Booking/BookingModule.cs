@@ -11,6 +11,7 @@ public static class BookingModule
         services.AddScoped<IDoctorAvailabilityReader, DoctorAvailabilityReader>();
         services.AddScoped<SlotService>();
         services.AddScoped<AppointmentService>();
+        services.AddScoped<AppointmentQueries>();
 
         // الـ Job بياخد IServiceScopeFactory بس، فـ Singleton آمن
         services.AddSingleton<ExpirePendingJob>();
