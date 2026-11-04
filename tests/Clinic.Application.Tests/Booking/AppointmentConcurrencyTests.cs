@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Threading.Tasks;
 using Clinic.Application.Common.Exceptions;
+using Clinic.Application.Common.Time;
 using Clinic.Application.Features.Appointments;
 using Clinic.Domain.Enums;
 using Clinic.Infrastructure.Persistence;
@@ -12,8 +13,6 @@ namespace Clinic.Application.Tests.Booking;
 
 public class AppointmentConcurrencyTests
 {
-    private static readonly DateTime SlotUtc = new(2026, 11, 3, 7, 0, 0, DateTimeKind.Utc);
-
     private static AppDbContext CreateDb(string connectionString)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -35,11 +34,20 @@ public class AppointmentConcurrencyTests
 
         using var setupDb = CreateDb(connectionString);
 
-        var doctor = await setupDb.Doctors.AsNoTracking().FirstAsync();
+        // ناخد أول دوام يوم الثلاثاء، ونستخدم الدكتور صاحبه عشان الميعاد يكون جوه ساعات شغله
+        var schedule = await setupDb.WorkingSchedules
+            .AsNoTracking()
+            .FirstAsync(w => w.DayOfWeek == DayOfWeek.Tuesday && w.IsActive);
+
+        var doctor = await setupDb.Doctors.AsNoTracking().FirstAsync(d => d.Id == schedule.DoctorId);
         var patient = await setupDb.Patients.AsNoTracking().FirstAsync();
 
+        // الميعاد = أول دقيقة في دوام الدكتور، بتوقيت القاهرة وبعدين UTC
+        var day = new DateOnly(2026, 11, 3);
+        var slotUtc = ClinicTime.ToUtc(day, schedule.StartTime);
+
         // ننضف أي حجز قديم على نفس الميعاد عشان الاختبار يتكرر
-        var old = setupDb.Appointments.Where(a => a.DoctorId == doctor.Id && a.StartAt == SlotUtc);
+        var old = setupDb.Appointments.Where(a => a.DoctorId == doctor.Id && a.StartAt == slotUtc);
         setupDb.Appointments.RemoveRange(old);
         await setupDb.SaveChangesAsync();
 
@@ -50,7 +58,7 @@ public class AppointmentConcurrencyTests
         var serviceB = new AppointmentService(dbB);
 
         var request = new BookAppointmentRequest(
-            patient.Id, doctor.Id, SlotUtc, AppointmentType.New, PaymentMethod.Online);
+            patient.Id, doctor.Id, slotUtc, AppointmentType.New, PaymentMethod.Online);
 
         var results = await Task.WhenAll(
             TryBookAsync(serviceA, request),
@@ -64,7 +72,7 @@ public class AppointmentConcurrencyTests
 
         var stored = await setupDb.Appointments.CountAsync(a =>
             a.DoctorId == doctor.Id
-            && a.StartAt == SlotUtc
+            && a.StartAt == slotUtc
             && a.Status != AppointmentStatus.Cancelled
             && a.Status != AppointmentStatus.Expired);
         Assert.Equal(1, stored);

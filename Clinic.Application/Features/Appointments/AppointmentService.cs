@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Clinic.Application.Common.Exceptions;
 using Clinic.Application.Common.Interfaces;
+using Clinic.Application.Common.Time;
 using Clinic.Domain.Entities;
 using Clinic.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -28,7 +30,51 @@ public class AppointmentService
             .FirstOrDefaultAsync(d => d.Id == request.DoctorId, ct)
             ?? throw new NotFoundException(nameof(Doctor), request.DoctorId);
 
-        var endAtUtc = request.StartAtUtc.AddMinutes(30);
+        // 1) نحوّل الوقت لتوقيت القاهرة
+        var localStart = ClinicTime.ToLocal(request.StartAtUtc);
+        var localDate = DateOnly.FromDateTime(localStart);
+        var localTime = TimeOnly.FromDateTime(localStart).ToTimeSpan();
+
+        // 2) كل جداول الدكتور لليوم ده (ممكن تكون فترتين)
+        var schedules = await _db.WorkingSchedules
+            .AsNoTracking()
+            .Where(w => w.DoctorId == request.DoctorId
+                && w.IsActive
+                && w.DayOfWeek == localDate.DayOfWeek)
+            .ToListAsync(ct);
+
+        if (schedules.Count == 0)
+        {
+            throw new AppValidationException(
+                $"The doctor does not work on {localDate.DayOfWeek}. Requested local time: {localStart:HH:mm}.");
+        }
+
+        // 3) نلاقي الفترة اللي الموعد جواها
+        var containing = schedules
+            .Where(s => localTime >= s.StartTime.ToTimeSpan()
+                && localTime + TimeSpan.FromMinutes(s.SlotDurationMinutes) <= s.EndTime.ToTimeSpan())
+            .ToList();
+
+        if (containing.Count == 0)
+        {
+            var shifts = string.Join(", ", schedules.Select(s => $"{s.StartTime:HH:mm}-{s.EndTime:HH:mm}"));
+            throw new AppValidationException(
+                $"The requested time is outside the doctor's working hours. Requested local time: {localStart:HH:mm}. Shifts: {shifts}.");
+        }
+
+        // 4) الموعد لازم يكون على شبكة الكشف بتاعة الفترة
+        var schedule = containing.FirstOrDefault(s =>
+            (localTime - s.StartTime.ToTimeSpan()).TotalMinutes % s.SlotDurationMinutes == 0);
+
+        if (schedule is null)
+        {
+            throw new AppValidationException("The requested time does not match the slot grid.");
+        }
+
+        var slotLength = TimeSpan.FromMinutes(schedule.SlotDurationMinutes);
+
+        // 5) التعارض مع حجز تاني
+        var endAtUtc = request.StartAtUtc.Add(slotLength);
 
         var isTaken = await _db.Appointments.AnyAsync(a =>
             a.DoctorId == request.DoctorId
