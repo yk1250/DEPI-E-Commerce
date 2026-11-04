@@ -143,9 +143,7 @@ public class AppointmentService
         string? reason,
         CancellationToken ct = default)
     {
-        var appointment = await _db.Appointments
-            .FirstOrDefaultAsync(a => a.Id == appointmentId, ct)
-            ?? throw new NotFoundException(nameof(Appointment), appointmentId);
+        var appointment = await LoadAsync(appointmentId, ct);
 
         if (appointment.PatientId != patientId)
         {
@@ -173,8 +171,66 @@ public class AppointmentService
         return appointment;
     }
 
+    /// الريسبشن أو الدكتور: المريض وصل العيادة. من Confirmed بس.
+    public async Task<Appointment> CheckInAsync(int appointmentId, CancellationToken ct = default)
+    {
+        var appointment = await LoadAsync(appointmentId, ct);
+
+        if (appointment.Status != AppointmentStatus.Confirmed)
+        {
+            throw new ConflictException($"Only a Confirmed appointment can be checked in. Current status: {appointment.Status}.");
+        }
+
+        appointment.Status = AppointmentStatus.CheckedIn;
+
+        await _db.SaveChangesAsync(ct);
+
+        return appointment;
+    }
+
+    /// الدكتور: خلص الكشف. من CheckedIn بس.
+    public async Task<Appointment> CompleteAsync(int appointmentId, CancellationToken ct = default)
+    {
+        var appointment = await LoadAsync(appointmentId, ct);
+
+        if (appointment.Status != AppointmentStatus.CheckedIn)
+        {
+            throw new ConflictException($"Only a CheckedIn appointment can be completed. Current status: {appointment.Status}.");
+        }
+
+        appointment.Status = AppointmentStatus.Completed;
+
+        await _db.SaveChangesAsync(ct);
+
+        return appointment;
+    }
+
+    /// الدكتور: المريض ما جاش. من Confirmed بس، وبعد ما الموعد يبدأ.
+    public async Task<Appointment> MarkNoShowAsync(int appointmentId, CancellationToken ct = default)
+    {
+        var appointment = await LoadAsync(appointmentId, ct);
+
+        if (appointment.Status != AppointmentStatus.Confirmed)
+        {
+            throw new ConflictException($"Only a Confirmed appointment can be marked as no-show. Current status: {appointment.Status}.");
+        }
+
+        var nowUtc = _time.GetUtcNow().UtcDateTime;
+
+        if (nowUtc < appointment.StartAt)
+        {
+            throw new ConflictException("A no-show can only be marked after the appointment start time.");
+        }
+
+        appointment.Status = AppointmentStatus.NoShow;
+
+        await _db.SaveChangesAsync(ct);
+
+        return appointment;
+    }
+
     /// يحوّل الحجوزات PendingPayment اللي انتهت مهلة دفعها لـ Expired، ويرجّع عددها.
-    /// الـ Hosted Service (B11) هيستدعيه دورياً. الـ Confirmed ما بيتلمسش أبداً.
+    /// الـ Hosted Service بيستدعيه دورياً. الـ Confirmed ما بيتلمسش أبداً.
     public async Task<int> ExpirePendingAsync(CancellationToken ct = default)
     {
         var nowUtc = _time.GetUtcNow().UtcDateTime;
@@ -196,5 +252,12 @@ public class AppointmentService
         }
 
         return expired.Count;
+    }
+
+    private async Task<Appointment> LoadAsync(int appointmentId, CancellationToken ct)
+    {
+        return await _db.Appointments
+            .FirstOrDefaultAsync(a => a.Id == appointmentId, ct)
+            ?? throw new NotFoundException(nameof(Appointment), appointmentId);
     }
 }
