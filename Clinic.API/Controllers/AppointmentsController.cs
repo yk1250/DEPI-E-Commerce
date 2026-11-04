@@ -2,6 +2,7 @@
 using Clinic.Application.Common.Interfaces;
 using Clinic.Application.Common.Security;
 using Clinic.Application.Features.Appointments;
+using Clinic.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -42,16 +43,37 @@ public class AppointmentsController : ControllerBase
             new BookAppointmentRequest(patientId, body.DoctorId, body.StartAtUtc, body.Type, body.PaymentMethod),
             ct);
 
-        var dto = new AppointmentDto(
-            appointment.Id,
-            appointment.DoctorId,
-            appointment.PatientId,
-            appointment.StartAt,
-            appointment.EndAt,
-            appointment.Status,
-            appointment.PriceSnapshot,
-            appointment.ExpiresAt);
-
-        return StatusCode(StatusCodes.Status201Created, dto);
+        return StatusCode(StatusCodes.Status201Created, ToDto(appointment));
     }
+
+    /// المريض يلغي موعده. ممنوع قبل الموعد بأقل من ساعتين.
+    [HttpPost("{id:int}/cancel")]
+    [Authorize(Roles = Roles.Patient)]
+    [ProducesResponseType(typeof(AppointmentDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> Cancel(
+        int id,
+        [FromBody] CancelAppointmentBody? body,
+        CancellationToken ct)
+    {
+        var patientId = _currentUser.PatientId
+            ?? throw new ForbiddenException("Only patients can cancel their appointments.");
+
+        var appointment = await _appointments.CancelByPatientAsync(id, patientId, body?.Reason, ct);
+
+        return Ok(ToDto(appointment));
+    }
+
+    private static AppointmentDto ToDto(Appointment appointment) => new(
+        appointment.Id,
+        appointment.DoctorId,
+        appointment.PatientId,
+        appointment.StartAt,
+        appointment.EndAt,
+        appointment.Status,
+        appointment.PriceSnapshot,
+        appointment.ExpiresAt);
 }
