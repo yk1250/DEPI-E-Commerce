@@ -113,6 +113,36 @@ public class AppointmentService
             throw new ConflictException("This slot is already booked.");
         }
 
+        // 6) قواعد المتابعة: لو الحجز FollowUp ولقينا كشف مكتمل قريب، نطبّق الخصم.
+        //    غير كده بيتحوّل لكشف عادي بالسعر الكامل.
+        var appointmentType = request.Type;
+        var price = doctor.ConsultationFee;
+        int? previousId = null;
+
+        if (request.Type == AppointmentType.FollowUp)
+        {
+            var previous = await _db.Appointments
+                .AsNoTracking()
+                .Where(a => a.PatientId == request.PatientId
+                    && a.DoctorId == request.DoctorId
+                    && a.Status == AppointmentStatus.Completed
+                    && a.EndAt <= request.StartAtUtc)
+                .OrderByDescending(a => a.EndAt)
+                .FirstOrDefaultAsync(ct);
+
+            var windowEnd = previous?.EndAt.AddDays(doctor.FollowUpWindowDays);
+
+            if (previous is not null && request.StartAtUtc <= windowEnd)
+            {
+                previousId = previous.Id;
+                price = doctor.ConsultationFee * doctor.FollowUpFeePercent / 100m;
+            }
+            else
+            {
+                appointmentType = AppointmentType.New;
+            }
+        }
+
         var isOnline = request.PaymentMethod == PaymentMethod.Online;
 
         var appointment = new Appointment
@@ -121,9 +151,10 @@ public class AppointmentService
             PatientId = request.PatientId,
             StartAt = request.StartAtUtc,
             EndAt = endAtUtc,
-            Type = request.Type,
+            Type = appointmentType,
+            PreviousAppointmentId = previousId,
             Status = isOnline ? AppointmentStatus.PendingPayment : AppointmentStatus.Confirmed,
-            PriceSnapshot = doctor.ConsultationFee,
+            PriceSnapshot = price,
             ExpiresAt = isOnline ? nowUtc.Add(PaymentWindow) : null,
             CreatedAt = nowUtc
         };
