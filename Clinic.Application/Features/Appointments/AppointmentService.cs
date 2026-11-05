@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Clinic.Application.Common.Exceptions;
 using Clinic.Application.Common.Interfaces;
 using Clinic.Application.Common.Time;
+using Clinic.Application.Features.Waitlist;
 using Clinic.Domain.Entities;
 using Clinic.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -18,11 +19,13 @@ public class AppointmentService
 
     private readonly IAppDbContext _db;
     private readonly TimeProvider _time;
+    private readonly WaitlistService? _waitlist;
 
-    public AppointmentService(IAppDbContext db, TimeProvider? time = null)
+    public AppointmentService(IAppDbContext db, TimeProvider? time = null, WaitlistService? waitlist = null)
     {
         _db = db;
         _time = time ?? TimeProvider.System;
+        _waitlist = waitlist;
     }
 
     public async Task<Appointment> BookAsync(BookAppointmentRequest request, CancellationToken ct = default)
@@ -174,7 +177,8 @@ public class AppointmentService
         return appointment;
     }
 
-    /// المريض يلغي موعده. بيفتح الميعاد للحجز تاني. ممنوع قبل الموعد بأقل من ساعتين.
+    /// المريض يلغي موعده. بيفتح الميعاد للحجز تاني، وبيبلّغ أول مريض في قايمة الانتظار.
+    /// ممنوع قبل الموعد بأقل من ساعتين.
     public async Task<Appointment> CancelByPatientAsync(
         int appointmentId,
         int patientId,
@@ -206,10 +210,13 @@ public class AppointmentService
 
         await _db.SaveChangesAsync(ct);
 
+        await NotifyWaitlistAsync(appointment, ct);
+
         return appointment;
     }
 
-    /// الدكتور صاحب الموعد يلغي موعده. مفيش قاعدة ساعتين للدكتور. من PendingPayment أو Confirmed بس.
+    /// الدكتور صاحب الموعد يلغي موعده، وبيبلّغ أول مريض في قايمة الانتظار.
+    /// مفيش قاعدة ساعتين للدكتور. من PendingPayment أو Confirmed بس.
     public async Task<Appointment> CancelByDoctorAsync(
         int appointmentId,
         int doctorId,
@@ -235,6 +242,8 @@ public class AppointmentService
         appointment.CancelReason = reason;
 
         await _db.SaveChangesAsync(ct);
+
+        await NotifyWaitlistAsync(appointment, ct);
 
         return appointment;
     }
@@ -333,6 +342,19 @@ public class AppointmentService
         }
 
         return expired.Count;
+    }
+
+    /// لو الـ WaitlistService متسجل، بنبلّغ أول مريض في قايمة اليوم اللي الموعد اتفتح فيه (بتوقيت القاهرة).
+    private async Task NotifyWaitlistAsync(Appointment appointment, CancellationToken ct)
+    {
+        if (_waitlist is null)
+        {
+            return;
+        }
+
+        var localDate = DateOnly.FromDateTime(ClinicTime.ToLocal(appointment.StartAt));
+
+        await _waitlist.NotifyFirstForOpenSlotAsync(appointment.DoctorId, localDate, ct);
     }
 
     private async Task<Appointment> LoadAsync(int appointmentId, CancellationToken ct)
