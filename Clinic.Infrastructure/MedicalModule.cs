@@ -1,4 +1,5 @@
 using Clinic.Application.Common.Interfaces;
+using Clinic.Infrastructure.Files;
 using Clinic.Infrastructure.Security.Encryption;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -37,6 +38,19 @@ public static class MedicalModule
 
         services.AddSingleton(new EncryptionSettings(key));
         services.AddSingleton<IFieldEncryptor, AesGcmFieldEncryptor>();
+
+        // مكان تخزين المرفقات: من الإعداد Attachments:RootPath، وإلا فولدر برا المشروع بالكامل
+        var attachmentsRoot = configuration["Attachments:RootPath"];
+        if (string.IsNullOrWhiteSpace(attachmentsRoot))
+        {
+            attachmentsRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ClinicApi",
+                "attachments");
+        }
+
+        services.AddSingleton(new AttachmentStorageSettings(attachmentsRoot));
+        services.AddSingleton<IFileStorage, LocalFileStorage>();
 
         return services;
     }
