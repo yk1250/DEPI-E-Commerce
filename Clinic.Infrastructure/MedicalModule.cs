@@ -1,4 +1,5 @@
 using Clinic.Application.Common.Interfaces;
+using Clinic.Application.Features.PatientAccess;
 using Clinic.Infrastructure.Files;
 using Clinic.Infrastructure.Security.Encryption;
 using Microsoft.Extensions.Configuration;
@@ -51,6 +52,9 @@ public static class MedicalModule
 
         services.AddSingleton(new AttachmentStorageSettings(attachmentsRoot));
         services.AddSingleton<IFileStorage, LocalFileStorage>();
+
+        // قاعدة "مين يشوف البيانات الطبية": بتتسجل هنا لأنها بتخدم السجل الطبي والمرفقات
+        services.AddScoped<IPatientAccessGuard, PatientAccessGuard>();
 
         return services;
     }
