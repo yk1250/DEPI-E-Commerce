@@ -1,4 +1,5 @@
 using Clinic.Application.Common.Interfaces;
+using Clinic.Application.Features.Medical;
 using Clinic.Application.Features.PatientAccess;
 using Clinic.Infrastructure.Files;
 using Clinic.Infrastructure.Security.Encryption;
@@ -55,6 +56,8 @@ public static class MedicalModule
 
         // قاعدة "مين يشوف البيانات الطبية": بتتسجل هنا لأنها بتخدم السجل الطبي والمرفقات
         services.AddScoped<IPatientAccessGuard, PatientAccessGuard>();
+
+        services.AddScoped<MedicalHistoryService>();
 
         return services;
     }
