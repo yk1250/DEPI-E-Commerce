@@ -1,4 +1,5 @@
 using Clinic.Application.Common.Interfaces;
+using Clinic.Application.Features.Attachments;
 using Clinic.Application.Features.Medical;
 using Clinic.Application.Features.PatientAccess;
 using Clinic.Infrastructure.Files;
@@ -58,6 +59,7 @@ public static class MedicalModule
         services.AddScoped<IPatientAccessGuard, PatientAccessGuard>();
 
         services.AddScoped<MedicalHistoryService>();
+        services.AddScoped<AttachmentService>();
 
         return services;
     }
