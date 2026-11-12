@@ -15,6 +15,7 @@ public static class PaymentsModule
     {
         services.AddScoped<ICouponRedeemer, CouponRedeemer>();
         services.AddScoped<CouponService>();
+        services.AddScoped<AdminCouponService>();
         services.AddScoped<ClinicPaymentService>();
 
         return services;
