@@ -1,5 +1,6 @@
 using Clinic.Application.Common.Interfaces;
 using Clinic.Application.Features.Coupons;
+using Clinic.Application.Features.Payments;
 using Clinic.Infrastructure.Coupons;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +15,7 @@ public static class PaymentsModule
     {
         services.AddScoped<ICouponRedeemer, CouponRedeemer>();
         services.AddScoped<CouponService>();
+        services.AddScoped<ClinicPaymentService>();
 
         return services;
     }

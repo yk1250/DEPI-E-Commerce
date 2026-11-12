@@ -54,6 +54,7 @@ internal sealed class MedicalTestEnv : IDisposable
     private int _slot;
 
     public AppDbContext Db { get; }
+    public int ClinicId { get; private set; }
     public int Doctor1 { get; private set; }
     public int PatientA { get; private set; }
     public Guid PatientAUserId { get; private set; }
@@ -95,6 +96,7 @@ internal sealed class MedicalTestEnv : IDisposable
         db.Doctors.Add(doctor);
         await db.SaveChangesAsync();
         env.Doctor1 = doctor.Id;
+        env.ClinicId = clinic.Id;
 
         (env.PatientA, env.PatientAUserId) = await AddPatientAsync(db, "patientA");
         (env.PatientB, env.PatientBUserId) = await AddPatientAsync(db, "patientB");
