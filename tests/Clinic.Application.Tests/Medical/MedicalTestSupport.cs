@@ -105,7 +105,11 @@ internal sealed class MedicalTestEnv : IDisposable
     }
 
     /// بيضيف موعد وبيرجّع الـ Id بتاعه.
-    public async Task<int> AddAppointmentAsync(int doctorId, int patientId, AppointmentStatus status)
+    public async Task<int> AddAppointmentAsync(
+        int doctorId,
+        int patientId,
+        AppointmentStatus status,
+        DateTime? expiresAt = null)
     {
         var start = new DateTime(2026, 11, 3, 7, 0, 0, DateTimeKind.Utc).AddMinutes(30 * _slot++);
         var appointment = new Appointment
@@ -117,7 +121,8 @@ internal sealed class MedicalTestEnv : IDisposable
             Type = AppointmentType.New,
             Status = status,
             PriceSnapshot = 300m,
-            CreatedAt = new DateTime(2026, 11, 1, 7, 0, 0, DateTimeKind.Utc)
+            CreatedAt = new DateTime(2026, 11, 1, 7, 0, 0, DateTimeKind.Utc),
+            ExpiresAt = expiresAt
         };
         Db.Appointments.Add(appointment);
         await Db.SaveChangesAsync();
