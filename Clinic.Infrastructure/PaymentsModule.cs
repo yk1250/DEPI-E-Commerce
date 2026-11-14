@@ -2,6 +2,7 @@ using Clinic.Application.Common.Interfaces;
 using Clinic.Application.Features.Coupons;
 using Clinic.Application.Features.Payments;
 using Clinic.Infrastructure.Coupons;
+using Clinic.Infrastructure.Payments;
 using Clinic.Infrastructure.Payments.Paymob;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +22,9 @@ public static class PaymentsModule
 
         AddPaymob(services, configuration);
         services.AddScoped<OnlinePaymentService>();
+        services.AddScoped<IPaymentSettler, PaymentSettler>();
+        services.AddScoped<IAppointmentConfirmer, AppointmentConfirmer>();
+        services.AddScoped<PaymobWebhookService>();
 
         return services;
     }
@@ -33,10 +37,12 @@ public static class PaymentsModule
         {
             // مفيش مفاتيح: التطبيق يشتغل عادي، والدفع الأونلاين بس هو اللي يرجّع خطأ واضح
             services.AddSingleton<IPaymobClient, UnconfiguredPaymobClient>();
+            services.AddSingleton<IPaymobWebhookVerifier, UnconfiguredPaymobWebhookVerifier>();
             return;
         }
 
         services.AddSingleton(settings);
+        services.AddSingleton<IPaymobWebhookVerifier>(new PaymobWebhookVerifier(settings));
         services.AddSingleton<IPaymobClient>(_ => new PaymobClient(
             new HttpClient
             {
