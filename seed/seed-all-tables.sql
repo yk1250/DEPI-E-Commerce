@@ -198,16 +198,8 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Payments WHERE AppointmentId = @Apt4)
 
 -- ---------------------------------------------------------------------
 -- 7) السجل الطبي والمرفقات والتقييمات
---    ملاحظة: البيانات الطبية هنا plain text للتجربة، والتشفير يتضاف في مرحلة السجل الطبي.
+--    ملاحظة: السجل الطبي مش بيتعمل في الـ Seed لأنه مشفر. بيتعمل من الـ API: PUT /api/medical-history/me
 -- ---------------------------------------------------------------------
-IF NOT EXISTS (SELECT 1 FROM dbo.MedicalHistories WHERE PatientId = @PatId1)
-    INSERT INTO dbo.MedicalHistories (PatientId, ChronicConditions, Allergies, CurrentMedications, UpdatedAt)
-    VALUES (@PatId1, N'ضغط دم مرتفع', N'البنسلين', N'ليزينوبريل 10 مج', SYSUTCDATETIME());
-
-IF NOT EXISTS (SELECT 1 FROM dbo.MedicalHistories WHERE PatientId = @PatId2)
-    INSERT INTO dbo.MedicalHistories (PatientId, ChronicConditions, Allergies, CurrentMedications, UpdatedAt)
-    VALUES (@PatId2, NULL, N'لا يوجد', NULL, SYSUTCDATETIME());
-
 IF NOT EXISTS (SELECT 1 FROM dbo.Attachments WHERE PatientId = @PatId1 AND FileName = N'lab-results.pdf')
     INSERT INTO dbo.Attachments (PatientId, AppointmentId, UploadedByUserId, FileName, StoredPath, ContentType, SizeBytes, UploadedAt)
     VALUES (@PatId1, @Apt1, @Pat1, N'lab-results.pdf', N'/secure-uploads/test/lab-results.pdf', N'application/pdf', 245760, '2026-10-20T09:10:00');
